@@ -64,7 +64,6 @@ END_GAME_BY_HANDLE () {
 WRONG_USER_INPUT () {
   echo -e "\nThat is not an integer, guess again:"
   INCREASE_TRIES
-  read GUESS
 }
 
 USER_WON () {
