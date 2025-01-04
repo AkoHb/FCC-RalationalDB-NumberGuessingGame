@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PSQL="psql --username=freecodecamp --dbname=number_guess --tuples-only --no-align -c"
+PSQL="psql --username=freecodecamp --dbname=number_guess  --tuples-only -c"
 
 # declare some variables
 USERNAME=""
@@ -9,11 +9,12 @@ TRIES=1
 GUESS=0
 SECRET_NUMBER=$(( $RANDOM % 1000 + 1 ))
 
+echo -e "\nSecret number is: $SECRET_NUMBER"
 # Write some func to devide our big func to small pieces
 
 # user data
 
-GET_USERNAME(){
+GET_USERNAME () {
   echo -e "\nEnter your username:"
   read USERNAME
 
@@ -35,11 +36,9 @@ UPDATE_USER_INTO_DB () {
     INSERT_USER=$($PSQL "INSERT INTO users (username) VALUES ('$USERNAME')")
     echo -e "\nWelcome, $USERNAME! It looks like this is your first time here."
   else
-    GAMES_PLAYED=$($PSQL "SELECT COUNT(*) FROM games INNER JOIN users USING(user_id) WHERE username='$USERNAME'")
-    BEST_GAME=$($PSQL "SELECT MIN(guesses) FROM games INNER JOIN users USING(user_id) WHERE username='$USERNAME'")
-    GAMES=$(if [[ $GAMES_PLAYED -eq 1 ]]; then echo "game"; else echo "games"; fi)
-    GUESSES=$(if [[ $BEST_GAME -eq 1 ]]; then echo "guess"; else echo "guesses"; fi)
-    echo -e "\nWelcome back, $USERNAME! You have played $GAMES_PLAYED games, and your best game took $BEST_GAME $GUESSES."
+    GAMES_PLAYED=$($PSQL "SELECT COUNT(*) FROM games INNER JOIN users USING(user_id) WHERE username = '$USERNAME'")
+    BEST_GAME=$($PSQL "SELECT MIN(guesses) FROM games INNER JOIN users USING(user_id) WHERE username = '$USERNAME'")
+    echo "Welcome back, $USERNAME! You have played $GAMES_PLAYED games, and your best game took $BEST_GAME guesses."
   fi
 
   # also update USER_ID
@@ -67,10 +66,16 @@ WRONG_USER_INPUT () {
 }
 
 USER_WON () {
-  echo -e "\nYou guessed it in $TRIES tries. The secret number was $SECRET_NUMBER. Nice job!"
+  INCREASE_TRIES
+  echo "You guessed it in $TRIES tries. The secret number was $SECRET_NUMBER. Nice job!"
 }
 
 # end errors and brake states
+
+# update final table with current user
+UPDATE_TOTAL () {
+  INSERTED_GAME=$($PSQL "INSERT INTO games (user_id, guesses) VALUES ($USER_ID, $TRIES)")
+}
 
 # processing numbers and tries
 
@@ -115,17 +120,13 @@ CHECK_GUESS_NUM () {
     CHECK_GUESS_NUM_TO_VALIDATION
   elif [[ $GUESS -eq $SECRET_NUMBER ]]
   then
+    #finally update DB 
+    UPDATE_TOTAL
     USER_WON
   fi
 }
 
 # end processing numbers and tries
-
-# update final table with current user
-UPDATE_TOTAL () {
-  INSERTED_GAME=$($PSQL "INSERT INTO games (user_id, guesses) VALUES ($USER_ID, $TRIES)")
-}
-
 # end small pieces
 
 # main func
@@ -144,9 +145,7 @@ MAIN_FUNCTION () {
   
   # start while loop to check user unput
   CHECK_GUESS_NUM_TO_VALIDATION
-
-  #finally update DB 
-  UPDATE_TOTAL
+  
 }
 
 MAIN_FUNCTION
