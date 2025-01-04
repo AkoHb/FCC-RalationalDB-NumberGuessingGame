@@ -35,11 +35,11 @@ UPDATE_USER_INTO_DB () {
     INSERT_USER=$($PSQL "INSERT INTO users (username) VALUES ('$USERNAME')")
     echo -e "\nWelcome, $USERNAME! It looks like this is your first time here."
   else
-    GAMES_PLAYED=$($PSQL "SELECT COUNT(*) FROM games INNER JOIN users USING(user_id) WHERE username = '$USERNAME'")
-    BEST_GAME=$($PSQL "SELECT MAX(guesses) FROM games INNER JOIN users USING(user_id) WHERE username = '$USERNAME'")
+    GAMES_PLAYED=$($PSQL "SELECT COUNT(*) FROM games INNER JOIN users USING(user_id) WHERE username='$USERNAME'")
+    BEST_GAME=$($PSQL "SELECT MIN(guesses) FROM games INNER JOIN users USING(user_id) WHERE username='$USERNAME'")
     GAMES=$(if [[ $GAMES_PLAYED -eq 1 ]]; then echo "game"; else echo "games"; fi)
     GUESSES=$(if [[ $BEST_GAME -eq 1 ]]; then echo "guess"; else echo "guesses"; fi)
-    echo -e "\nWelcome back, $USERNAME! You have played $GAMES_PLAYED $GAMES, and your best game took $BEST_GAME $GUESSES."
+    echo -e "\nWelcome back, $USERNAME! You have played $GAMES_PLAYED games, and your best game took $BEST_GAME $GUESSES."
   fi
 
   # also update USER_ID
@@ -75,7 +75,10 @@ USER_WON () {
 # processing numbers and tries
 
 CHECK_GUESS_NUM_TO_VALIDATION () {
-  if [[ echo $GUESS | grep -Eq '[exit|quit|end|q|e]i' ]]
+  # Enable case-insensitive matching
+  shopt -s nocasematch
+
+  if [[  $GUESS =~ ^(exit|quit|end|q|e)$ ]]
   then 
     END_GAME_BY_HANDLE 
   elif [[ ! $GUESS =~ ^[0-9]+$  ]]
@@ -87,6 +90,9 @@ CHECK_GUESS_NUM_TO_VALIDATION () {
   then
     CHECK_GUESS_NUM
   fi
+  
+  # Disable case-insensitive matching to avoid affecting the rest of the script
+  shopt -u nocasematch
 }
 
 INCREASE_TRIES () {
