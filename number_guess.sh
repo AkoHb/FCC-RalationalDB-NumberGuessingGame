@@ -1,151 +1,76 @@
 #!/bin/bash
 
-PSQL="psql --username=freecodecamp --dbname=number_guess  --tuples-only -c"
+PSQL="psql --username=freecodecamp --dbname=number_guess -t --no-align -c"
 
-# declare some variables
-USERNAME=""
-USER_ID=0
-TRIES=1
-GUESS=0
-SECRET_NUMBER=$(( $RANDOM % 1000 + 1 ))
+# declare variables
+BEST_GAME_GUESSES=0
+GAMES_COUNT=0
+GAME_ID=0
+GUESSES=0
+USER_INPUT=0
+RANDOM_NUMBER=$(( RANDOM % 1000 + 1 ))
 
-echo -e "\nSecret number is: $SECRET_NUMBER"
-# Write some func to devide our big func to small pieces
+echo "Enter your username:"
+read USERNAME
 
-# user data
+# check, if username isn't valid, try to input it else
+while [[ ! "$USERNAME" =~ ^[a-zA-Z0-9_]{1,23}$ ]] 
+do
+    echo "Username isn't valid. Please, check it (max lenght=23 chars and only nums and chars from 'a' to 'z') and try it again."
+    read USERNAME
+done
 
-GET_USERNAME () {
-  echo -e "\nEnter your username:"
-  read USERNAME
+# check and update table with user info
+user_into_db=$($PSQL "SELECT username FROM users WHERE username = '$USERNAME';")
 
-  USERNAME_CHARACTERS=$(echo $USERNAME | wc -c)
-  if [[ $USERNAME_CHARACTERS -gt 22 ]]
-  then
-    echo -e "Entered name is too long. Max count of chars is 22" 
-    GET_USERNAME
-  fi
-}
+if [[ -z $user_into_db ]]
+then
+    echo "Welcome, $USERNAME! It looks like this is your first time here."
+    insert_into_db=$($PSQL "INSERT INTO users (username) VALUES ('$USERNAME')")
+else
+    BEST_GAME_GUESSES=$($PSQL "SELECT best_game_guesses FROM users WHERE username = '$USERNAME';")
+    GAMES_COUNT=$($PSQL "SELECT games_count FROM users WHERE username = '$USERNAME';")
+    echo "Welcome back, $USERNAME! You have played $GAMES_COUNT games, and your best game took $BEST_GAME_GUESSES guesses."
+fi
 
-UPDATE_USER_INTO_DB () {
-  # try to find it into DB
-  NAME_TO_DB=$($PSQL "SELECT username FROM users WHERE username='$USERNAME'")
+# llop to guess a random number
+echo "Guess the secret number between 1 and 1000: "
 
-  #if it isn't there
-  if [[ -z $NAME_TO_DB ]]
-  then
-    INSERT_USER=$($PSQL "INSERT INTO users (username) VALUES ('$USERNAME')")
-    echo -e "\nWelcome, $USERNAME! It looks like this is your first time here."
-  else
-    GAMES_PLAYED=$($PSQL "SELECT COUNT(*) FROM games INNER JOIN users USING(user_id) WHERE username = '$USERNAME'")
-    BEST_GAME=$($PSQL "SELECT MIN(guesses) FROM games INNER JOIN users USING(user_id) WHERE username = '$USERNAME'")
-    echo "Welcome back, $USERNAME! You have played $GAMES_PLAYED games, and your best game took $BEST_GAME guesses."
-  fi
+while [[ $USER_INPUT -ne $RANDOM_NUMBER ]]; do
+    read USER_INPUT
 
-  # also update USER_ID
-  USER_ID=$($PSQL "SELECT user_id FROM users WHERE username = '$USERNAME'")
-}
+    if ! [[ $USER_INPUT =~ ^[0-9]+$ ]]; then
+        echo "That is not an integer, guess again:"
+        continue
+    fi
 
-# end user data
+    (( GUESSES ++ ))
 
-# get user input
-USET_INPUT () {
-  echo -e "\nGuess the secret number between 1 and 1000:"
-  read GUESS
-}
+    if [[ $USER_INPUT -lt $RANDOM_NUMBER ]]; then
+        echo "It's higher than that, guess again:"
+    elif [[ $USER_INPUT -gt $RANDOM_NUMBER ]]; then
+        echo "It's lower than that, guess again:"
+    fi
+done
 
-# try to catch some errors and brake states
+(( GAMES_COUNT ++ ))
 
-END_GAME_BY_HANDLE () {
-  echo -e "\nThe user end game by handle. Was $TRIES, but the SECRET NUMBER is $SECRET_NUMBER"
-  GUESS="STOP"
-}
+# With that section I can't pass the test. ( 8 and 13 marks)
+# update games table
+# # get user id at first and check it
+# USER_ID=$($PSQL "SELECT user_id FROM users WHERE username='$USERNAME'")
+# if [[ -z $USER_ID ]] 
+# then
+#   echo "User isn't hold into table users"
+# else
+#     GAME_ID=$($PSQL "INSERT INTO  games (user_id, random_num, guesses) VALUES ($USER_ID, $RANDOM_NUMBER, $GUESSES) RETURNING game_id")
+# fi
 
-WRONG_USER_INPUT () {
-  echo -e "\nThat is not an integer, guess again:"
-  INCREASE_TRIES
-}
+if [[ $BEST_GAME_GUESSES -eq 0 || $GUESSES -lt $BEST_GAME_GUESSES ]]
+then
+    $PSQL "UPDATE users SET games_count=$GAMES_COUNT, best_game_id=$GAME_ID, best_game_guesses=$GUESSES WHERE username='$USERNAME';" 1>/dev/null
+else
+    $PSQL "UPDATE users SET games_count=$GAMES_COUNT WHERE username='$USERNAME';" 1>/dev/null
+fi
 
-USER_WON () {
-  INCREASE_TRIES
-  echo "You guessed it in $TRIES tries. The secret number was $SECRET_NUMBER. Nice job!"
-}
-
-# end errors and brake states
-
-# update final table with current user
-UPDATE_TOTAL () {
-  INSERTED_GAME=$($PSQL "INSERT INTO games (user_id, guesses) VALUES ($USER_ID, $TRIES)")
-}
-
-# processing numbers and tries
-
-CHECK_GUESS_NUM_TO_VALIDATION () {
-  # Enable case-insensitive matching
-  shopt -s nocasematch
-
-  if [[  $GUESS =~ ^(exit|quit|end|q|e)$ ]]
-  then 
-    END_GAME_BY_HANDLE 
-  elif [[ ! $GUESS =~ ^[0-9]+$  ]]
-  then 
-    WRONG_USER_INPUT
-    USET_INPUT
-    CHECK_GUESS_NUM_TO_VALIDATION
-  elif [[ $GUESS =~ ^[+-]?[0-9]+$ ]]
-  then
-    CHECK_GUESS_NUM
-  fi
-  
-  # Disable case-insensitive matching to avoid affecting the rest of the script
-  shopt -u nocasematch
-}
-
-INCREASE_TRIES () {
-  TRIES=$(expr $TRIES + 1)
-  echo -e "\nThe tries count was increased by one. And now it $TRIES"
-}
-
-CHECK_GUESS_NUM () {
-  if [[ $GUESS -gt $SECRET_NUMBER ]]
-  then
-    echo -e "\nIt's lower than that, guess again:"
-    USET_INPUT
-    INCREASE_TRIES
-    CHECK_GUESS_NUM_TO_VALIDATION
-  elif [[ $GUESS -lt $SECRET_NUMBER ]]
-  then
-    echo -e "\nIt's higher than that, guess again:"
-    USET_INPUT
-    INCREASE_TRIES
-    CHECK_GUESS_NUM_TO_VALIDATION
-  elif [[ $GUESS -eq $SECRET_NUMBER ]]
-  then
-    #finally update DB 
-    UPDATE_TOTAL
-    USER_WON
-  fi
-}
-
-# end processing numbers and tries
-# end small pieces
-
-# main func
-
-MAIN_FUNCTION () {
-  echo -e "\nI glad to see you into guess game :)"
-
-  # get user name by input
-  GET_USERNAME
-
-  # check and update it into DB
-  UPDATE_USER_INTO_DB
-
-  # get first user input
-  USET_INPUT
-  
-  # start while loop to check user unput
-  CHECK_GUESS_NUM_TO_VALIDATION
-  
-}
-
-MAIN_FUNCTION
+echo "You guessed it in $GUESSES tries. The secret number was $RANDOM_NUMBER. Nice job!"
